@@ -1,0 +1,6 @@
+node_modules/
+.env
+data/
+.server-port
+server.log
+server.err.log

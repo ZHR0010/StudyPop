@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ff6da9" />
+    <title>StudyPop Camera</title>
+    <link rel="stylesheet" href="/src/camera.css" />
+  </head>
+  <body>
+    <main class="camera-card">
+      <div class="camera-title">
+        <span>📷</span>
+        <div>
+          <strong>Snap your question</strong>
+          <small>The photo goes straight back to StudyPop.</small>
+        </div>
+      </div>
+
+      <div class="camera-frame">
+        <video id="preview" autoplay playsinline></video>
+        <canvas id="photo" hidden></canvas>
+        <p id="status">Starting your camera...</p>
+      </div>
+
+      <div class="camera-actions">
+        <button id="capture" type="button" disabled>Take picture</button>
+        <button id="retake" class="secondary" type="button" hidden>Retake</button>
+        <button id="use" type="button" hidden>Use this photo</button>
+      </div>
+    </main>
+    <script type="module" src="/src/camera.js"></script>
+  </body>
+</html>
