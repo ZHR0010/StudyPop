@@ -59,6 +59,7 @@ const fallbackKit = {
 };
 
 const root = document.querySelector("#root");
+const isLocalDesktop = ["127.0.0.1", "localhost"].includes(location.hostname);
 let auth = {
   ready: false,
   user: null,
@@ -852,16 +853,24 @@ function renderComposer(section) {
               <span>Image</span>
               <input data-field="image-upload" type="file" accept="image/*" multiple />
             </label>
-            <button
-              class="tool-button"
-              type="button"
-              data-action="snap-picture"
-              title="Snap a picture"
-              ${ui.isCameraOpening ? "disabled" : ""}
-            >
-              ${renderIcon("camera")}
-              <span>${ui.isCameraOpening ? "Opening..." : "Snap"}</span>
-            </button>
+            ${isLocalDesktop ? `
+              <button
+                class="tool-button"
+                type="button"
+                data-action="snap-picture"
+                title="Snap a picture"
+                ${ui.isCameraOpening ? "disabled" : ""}
+              >
+                ${renderIcon("camera")}
+                <span>${ui.isCameraOpening ? "Opening..." : "Snap"}</span>
+              </button>
+            ` : `
+              <label class="tool-button" title="Snap a picture">
+                ${renderIcon("camera")}
+                <span>Snap</span>
+                <input data-field="camera-upload" type="file" accept="image/*" capture="environment" />
+              </label>
+            `}
             <button
               class="tool-button ${ui.isRecording ? "recording" : ""}"
               type="button"
@@ -1227,7 +1236,13 @@ async function toggleRecording() {
   }
 
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-    await startNativeRecording();
+    if (isLocalDesktop) {
+      await startNativeRecording();
+    } else {
+      ui.showVoiceFallback = true;
+      render();
+      showToast("This browser cannot record directly. Add an audio file instead.");
+    }
     return;
   }
 
@@ -1295,13 +1310,15 @@ async function toggleRecording() {
   } catch (error) {
     stopMicrophoneTracks();
     ui.showVoiceFallback = true;
-    if (error.name === "NotAllowedError") {
+    if (error.name === "NotAllowedError" && isLocalDesktop) {
       await startNativeRecording();
       return;
     }
     const message = error.name === "NotFoundError"
       ? "No microphone was found on this device."
-      : "The microphone could not start. Check that another app is not using it.";
+      : error.name === "NotAllowedError"
+        ? "Microphone access was blocked. Allow it in your browser settings, then try again."
+        : "The microphone could not start. Check that another app is not using it.";
     showToast(message);
   }
 }
@@ -1681,7 +1698,7 @@ root.addEventListener("keydown", (event) => {
 });
 
 root.addEventListener("change", (event) => {
-  if (event.target.dataset.field === "image-upload") {
+  if (["image-upload", "camera-upload"].includes(event.target.dataset.field)) {
     addImages(event.target.files ?? []);
   }
 

@@ -1,0 +1,8 @@
+.env
+.git
+.vercel
+data
+node_modules
+.server-port
+server.log
+server.err.log

@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import {
   randomBytes,
@@ -24,7 +25,9 @@ loadEnvFile(join(root, ".env"));
 const startPort = Number(process.env.PORT ?? 5173);
 const maxBodyBytes = 10_000_000;
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 7;
-const dataDirectory = join(root, "data");
+const dataDirectory = process.env.VERCEL
+  ? join(tmpdir(), "studypop")
+  : join(root, "data");
 const usersFile = join(dataDirectory, "users.json");
 const sessions = new Map();
 const loginAttempts = new Map();
@@ -1144,6 +1147,12 @@ function launchCameraWindow(cameraUrl) {
 }
 
 function handleCameraStart(request, response) {
+  if (process.platform !== "win32") {
+    sendJson(response, 501, {
+      error: "Use the browser camera button on this device.",
+    });
+    return;
+  }
   if (!requestIsLoopback(request)) {
     sendJson(response, 403, {
       error: "Camera capture is available only from this local computer.",
@@ -1209,6 +1218,12 @@ function handleCameraStatus(request, response) {
 }
 
 function handleWindowsDictationToggle(request, response) {
+  if (process.platform !== "win32") {
+    sendJson(response, 501, {
+      error: "Use browser microphone permission on this device.",
+    });
+    return;
+  }
   if (!requestIsLoopback(request)) {
     sendJson(response, 403, {
       error: "Windows voice typing is available only on this computer.",
@@ -1346,8 +1361,7 @@ async function handleTranscribe(request, response) {
   }
 }
 
-function createAppServer() {
-  return createServer((request, response) => {
+export function handleRequest(request, response) {
     if (
       ["POST", "PUT", "PATCH", "DELETE"].includes(request.method ?? "") &&
       !requestIsSameOrigin(request)
@@ -1456,7 +1470,10 @@ function createAppServer() {
       "content-type": mimeTypes[extname(filePath)] ?? "application/octet-stream",
     });
     createReadStream(filePath).pipe(response);
-  });
+}
+
+function createAppServer() {
+  return createServer(handleRequest);
 }
 
 function listen(port) {
@@ -1477,4 +1494,6 @@ function listen(port) {
   });
 }
 
-listen(startPort);
+if (!process.env.VERCEL) {
+  listen(startPort);
+}
