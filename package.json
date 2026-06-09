@@ -12,6 +12,8 @@
     "check": "node --check server.mjs && node --check src/app.js",
     "desktop:dev": "npm --workspace @studypop/desktop run dev",
     "desktop:pack": "npm --workspace @studypop/desktop run pack",
-    "desktop:dist": "npm --workspace @studypop/desktop run dist"
+    "desktop:dist": "npm --workspace @studypop/desktop run dist",
+    "android:test": "cd apps/android && gradlew.bat testDebugUnitTest",
+    "android:build": "cd apps/android && gradlew.bat assembleDebug"
   }
 }

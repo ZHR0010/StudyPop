@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StudyPop</string>
+    <string name="camera_permission">StudyPop uses the camera only when you snap a question.</string>
+    <string name="microphone_permission">StudyPop uses the microphone only while you record a question.</string>
+</resources>

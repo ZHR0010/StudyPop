@@ -2,11 +2,12 @@
 
 ## 1. Goal
 
-Turn StudyPop into a coordinated product with three clients:
+Turn StudyPop into a coordinated product with four clients:
 
 1. **Web app** - the existing Vercel application.
 2. **Desktop app** - an Electron application, beginning with Windows.
 3. **iOS app** - a native SwiftUI application for iPhone and iPad.
+4. **Android app** - a native Kotlin and Jetpack Compose application.
 
 All clients will use the same user accounts, conversations, study kits, media,
 preferences, progress, AI features, and backend. A user should be able to start
@@ -66,10 +67,12 @@ flowchart TD
     Web["StudyPop Web"] --> Auth["Firebase Authentication"]
     Desktop["Electron Desktop"] --> Auth
     IOS["SwiftUI iOS App"] --> Auth
+    Android["Jetpack Compose Android App"] --> Auth
 
     Web --> API["StudyPop API v1 on Vercel"]
     Desktop --> API
     IOS --> API
+    Android --> API
 
     API --> Admin["Firebase Admin SDK"]
     Admin --> DB["Cloud Firestore"]
@@ -888,26 +891,30 @@ backend, Electron, iOS, and QA work can shorten elapsed time.
 
 ## 18. Feature Parity Checklist
 
-| Feature | Web | Electron | iOS |
-| --- | --- | --- | --- |
-| Signup/login/logout | Required | Required | Required |
-| Password reset | Required | Required | Required |
-| Subject rooms | Required | Required | Required |
-| General questions | Required | Required | Required |
-| Follow-up conversation | Required | Required | Required |
-| Image upload | Required | Required | Required |
-| Camera capture | Required | Required | Required |
-| Voice recording | Required | Required | Required |
-| AI transcription | Required | Required | Required |
-| Study summaries | Required | Required | Required |
-| Flashcards | Required | Required | Required |
-| Quizzes | Required | Required | Required |
-| Companion selection | Required | Required | Required |
-| Theme selection | Required | Required | Required |
-| Flashlight/torch | When supported | When supported | Required on supported devices |
-| Cross-device history | Required | Required | Required |
-| Local drafts | Required | Required | Required |
-| Full offline AI | Not planned | Not planned | Not planned |
+| Feature | Web | Electron | iOS | Android |
+| --- | --- | --- | --- | --- |
+| Signup/login/logout | Required | Required | Required | Required |
+| Password reset | Required | Required | Required | Required |
+| Subject rooms | Required | Required | Required | Required |
+| General questions | Required | Required | Required | Required |
+| Follow-up conversation | Required | Required | Required | Required |
+| Image upload | Required | Required | Required | Required |
+| Camera capture | Required | Required | Required | Required |
+| Voice recording | Required | Required | Required | Required |
+| AI transcription | Required | Required | Required | Required |
+| Study summaries | Required | Required | Required | Required |
+| Flashcards | Required | Required | Required | Required |
+| Quizzes | Required | Required | Required | Required |
+| Companion selection | Required | Required | Required | Required |
+| Theme selection | Required | Required | Required | Required |
+| Flashlight/torch | When supported | When supported | Required on supported devices | Required on supported devices |
+| Cross-device history | Required | Required | Required | Required |
+| Local drafts | Required | Required | Required | Required |
+| Full offline AI | Not planned | Not planned | Not planned | Not planned |
+
+Android implements the same feature set with Jetpack Compose, CameraX,
+MediaRecorder, Android Keystore, and the shared `/api/v1` contract. Its source
+lives in `apps/android`, and CI publishes a debug APK artifact on every push.
 
 ## 19. Main Risks and Mitigations
 
@@ -967,4 +974,3 @@ The cross-platform project is complete when:
   <https://firebase.google.com/docs/firestore/manage-data/enable-offline>
 - Apple developer distribution:
   <https://developer.apple.com/distribute/>
-
