@@ -3,6 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
+    @State private var confirmingDeletion = false
+    @State private var isDeleting = false
 
     var body: some View {
         NavigationStack {
@@ -62,6 +64,10 @@ struct SettingsView: View {
                                 dismiss()
                             }
                         }
+                        Button("Delete account and synced data", role: .destructive) {
+                            confirmingDeletion = true
+                        }
+                        .disabled(isDeleting)
                     } else {
                         Button("Sign up or log in") {
                             dismiss()
@@ -83,7 +89,27 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .confirmationDialog(
+                "Delete your StudyPop account?",
+                isPresented: $confirmingDeletion,
+                titleVisibility: .visible
+            ) {
+                Button("Delete account", role: .destructive) {
+                    Task {
+                        isDeleting = true
+                        defer { isDeleting = false }
+                        do {
+                            try await store.deleteAccount()
+                            dismiss()
+                        } catch {
+                            store.errorMessage = error.localizedDescription
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your account and synchronized study data will be permanently deleted.")
+            }
         }
     }
 }
-

@@ -93,6 +93,16 @@ final class AppStore: ObservableObject {
         showingSettings = false
     }
 
+    func deleteAccount() async throws {
+        try await api.deleteState()
+        try await auth.deleteAccount()
+        user = nil
+        state = StudyPopState()
+        UserDefaults.standard.removeObject(forKey: localStateKey)
+        syncMessage = "Saved on this device"
+        showingSettings = false
+    }
+
     func selectTheme(_ theme: StudyTheme) {
         state.selectedTheme = theme
         stateDidChange()
@@ -203,4 +213,3 @@ final class AppStore: ObservableObject {
         }
     }
 }
-

@@ -84,6 +84,18 @@ actor StudyPopAPI {
         stateVersion = response.version
     }
 
+    func deleteState() async throws {
+        struct DeleteResponse: Decodable {
+            let deleted: Bool
+        }
+        let _: DeleteResponse = try await request(
+            path: "/api/v1/state",
+            method: "DELETE",
+            authenticated: true
+        )
+        stateVersion = 0
+    }
+
     func answer(
         section: StudySection,
         question: String,

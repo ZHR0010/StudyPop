@@ -60,6 +60,15 @@ export function createApiClient(firebaseClient, {
       return payload;
     },
 
+    async deleteState() {
+      const payload = await request("/api/v1/state", {
+        method: "DELETE",
+        authenticated: true,
+      });
+      stateVersion = 0;
+      return payload;
+    },
+
     async answer(input) {
       return request("/api/v1/ai/answer", {
         method: "POST",
@@ -89,4 +98,3 @@ export function createApiClient(firebaseClient, {
     },
   };
 }
-

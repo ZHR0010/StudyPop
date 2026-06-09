@@ -21,6 +21,7 @@ import {
 import {
   FirebaseRequestError,
   bearerToken,
+  deleteUserState,
   firebaseConfigured,
   firebasePublicConfig,
   readUserState,
@@ -1011,6 +1012,16 @@ async function handleV1SaveState(request, response) {
   }
 }
 
+async function handleV1DeleteState(request, response) {
+  try {
+    const { token, user } = await authenticatedFirebaseRequest(request);
+    await deleteUserState(user.uid, token);
+    sendJson(response, 200, { deleted: true });
+  } catch (error) {
+    sendApiError(response, error);
+  }
+}
+
 async function handleV1Answer(request, response) {
   try {
     if (apiIsLimited(request, "answer", 30)) {
@@ -1619,6 +1630,11 @@ export function handleRequest(request, response) {
 
     if (request.method === "PUT" && request.url?.startsWith("/api/v1/state")) {
       handleV1SaveState(request, response);
+      return;
+    }
+
+    if (request.method === "DELETE" && request.url?.startsWith("/api/v1/state")) {
+      handleV1DeleteState(request, response);
       return;
     }
 

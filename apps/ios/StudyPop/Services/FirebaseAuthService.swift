@@ -96,6 +96,15 @@ actor FirebaseAuthService {
         )
     }
 
+    func deleteAccount() async throws {
+        let token = try await idToken()
+        let _: FirebaseAuthResponse = try await authRequest(
+            path: "accounts:delete",
+            body: ["idToken": token]
+        )
+        signOut()
+    }
+
     func signOut() {
         session = nil
         keychain.delete(account: sessionAccount)
@@ -226,4 +235,3 @@ private extension String {
         addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? self
     }
 }
-

@@ -101,6 +101,7 @@ let ui = {
   quizRevealed: false,
   showThemes: false,
   showCompanions: false,
+  showAccount: false,
   flashlightOn: false,
   toast: "",
   companionActionIndex: 0,
@@ -341,9 +342,12 @@ function render() {
               <span>${auth.openai.connected ? "AI ready" : "AI setup"}</span>
             </button>
             ${auth.user ? `
-              <div class="signed-in-user" title="${escapeHtml(auth.user.email)}">
-                <span>${escapeHtml(auth.user.name.charAt(0).toUpperCase())}</span>
-                <small>${escapeHtml(auth.user.name)}</small>
+              <div class="popover-wrap">
+                <button class="signed-in-user" type="button" data-action="toggle-account" title="${escapeHtml(auth.user.email)}">
+                  <span>${escapeHtml(auth.user.name.charAt(0).toUpperCase())}</span>
+                  <small>${escapeHtml(auth.user.name)}</small>
+                </button>
+                ${ui.showAccount ? renderAccountPopover() : ""}
               </div>
               <button class="auth-top-button logout" type="button" data-action="logout" aria-label="Log out">
                 ${renderIcon("log-out")}
@@ -580,6 +584,24 @@ function renderCompanionPicker() {
           </button>
         `).join("")}
       </div>
+    </div>
+  `;
+}
+
+function renderAccountPopover() {
+  return `
+    <div class="popover account-popover">
+      <div class="account-popover-heading">
+        <span>${escapeHtml(auth.user.name.charAt(0).toUpperCase())}</span>
+        <div>
+          <strong>${escapeHtml(auth.user.name)}</strong>
+          <small>${escapeHtml(auth.user.email)}</small>
+        </div>
+      </div>
+      <p>${renderIcon("cloud-check")} Your account syncs across StudyPop apps.</p>
+      <button class="delete-account-button" type="button" data-action="delete-account">
+        ${renderIcon("trash-2")} Delete my account
+      </button>
     </div>
   `;
 }
@@ -1059,6 +1081,7 @@ function resetTransientUi() {
   ui.quizRevealed = false;
   ui.showThemes = false;
   ui.showCompanions = false;
+  ui.showAccount = false;
 }
 
 async function submitAuthForm(form) {
@@ -1149,6 +1172,30 @@ async function logout() {
   resetTransientUi();
   render();
   showToast("Logged out. Your account data is still safe.");
+}
+
+async function deleteAccount() {
+  const confirmed = window.confirm(
+    "Delete your StudyPop account and synced study data? This cannot be undone.",
+  );
+  if (!confirmed) return;
+
+  auth.busy = true;
+  try {
+    await apiClient.deleteState();
+    await firebaseClient.deleteAccount();
+    window.localStorage.removeItem(STORAGE_KEY);
+    auth.user = null;
+    state = createStarterState();
+    resetTransientUi();
+    render();
+    showToast("Your StudyPop account and synced data were deleted.");
+  } catch (error) {
+    auth.error = error.message || "Your account could not be deleted.";
+    showToast(auth.error);
+  } finally {
+    auth.busy = false;
+  }
 }
 
 async function requestPasswordReset() {
@@ -1727,6 +1774,17 @@ root.addEventListener("click", (event) => {
     logout();
   }
 
+  if (action === "toggle-account") {
+    ui.showAccount = !ui.showAccount;
+    ui.showThemes = false;
+    ui.showCompanions = false;
+    render();
+  }
+
+  if (action === "delete-account") {
+    deleteAccount();
+  }
+
   if (action === "forgot-password") {
     requestPasswordReset();
   }
@@ -1743,12 +1801,14 @@ root.addEventListener("click", (event) => {
   if (action === "toggle-themes") {
     ui.showThemes = !ui.showThemes;
     ui.showCompanions = false;
+    ui.showAccount = false;
     render();
   }
 
   if (action === "toggle-companions") {
     ui.showCompanions = !ui.showCompanions;
     ui.showThemes = false;
+    ui.showAccount = false;
     render();
   }
 

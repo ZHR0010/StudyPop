@@ -63,3 +63,36 @@ test("Firebase client signs in and adds the ID token to API requests", async () 
   assert.equal(new Headers(apiRequest.init.headers).get("authorization"), "Bearer id-token");
 });
 
+test("Firebase client can delete the signed-in account", async () => {
+  let deletedWithToken = "";
+  const client = createFirebaseClient({
+    storage: memoryStorage(),
+    fetchImpl: async (url, init = {}) => {
+      if (url === "/api/v1/config") {
+        return Response.json({
+          firebase: { config: { apiKey: "client-key", projectId: "project", appId: "app" } },
+        });
+      }
+      if (String(url).includes("accounts:signInWithPassword")) {
+        return Response.json({
+          idToken: "delete-token",
+          refreshToken: "refresh-token",
+          expiresIn: "3600",
+          localId: "user-1",
+          email: "student@example.com",
+          displayName: "Student",
+        });
+      }
+      if (String(url).includes("accounts:delete")) {
+        deletedWithToken = JSON.parse(init.body).idToken;
+        return Response.json({});
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    },
+  });
+
+  await client.signIn({ email: "student@example.com", password: "password123" });
+  await client.deleteAccount();
+  assert.equal(deletedWithToken, "delete-token");
+  assert.equal(client.user, null);
+});

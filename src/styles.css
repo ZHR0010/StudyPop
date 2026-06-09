@@ -401,6 +401,76 @@ body[data-theme="dark"] .streak-card {
   background: var(--panel);
 }
 
+.account-popover {
+  right: 0;
+  width: min(300px, calc(100vw - 32px));
+}
+
+.account-popover-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.account-popover-heading > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  font-weight: 950;
+}
+
+.account-popover-heading div {
+  min-width: 0;
+  display: grid;
+}
+
+.account-popover-heading small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+}
+
+.account-popover > p {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.account-popover > p svg {
+  width: 16px;
+  color: var(--accent);
+}
+
+.delete-account-button {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  color: #c33a4f;
+  background: rgba(224, 65, 90, 0.1);
+  font-size: 0.73rem;
+  font-weight: 900;
+}
+
+.delete-account-button svg {
+  width: 16px;
+}
+
 .signed-in-user > span {
   width: 33px;
   height: 33px;

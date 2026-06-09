@@ -189,6 +189,13 @@ export function createFirebaseClient({
     });
   }
 
+  async function deleteAccount() {
+    const idToken = await getIdToken();
+    if (!idToken) throw new Error("Log in to delete your account.");
+    await firebaseRequest("accounts:delete", { idToken });
+    saveSession(null);
+  }
+
   async function getIdToken(forceRefresh = false) {
     await initialize();
     if (!session) return "";
@@ -225,6 +232,7 @@ export function createFirebaseClient({
     signOut() {
       saveSession(null);
     },
+    deleteAccount,
     sendPasswordReset,
     getIdToken,
     authorizedFetch,
@@ -236,4 +244,3 @@ export function createFirebaseClient({
     },
   };
 }
-

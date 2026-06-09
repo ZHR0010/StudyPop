@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   bearerToken,
+  deleteUserState,
   firebaseConfigured,
   firebasePublicConfig,
   fromFirestoreValue,
@@ -108,3 +109,15 @@ test("writeUserState writes an owned versioned document", async () => {
   assert.equal(result.version, 3);
 });
 
+test("deleteUserState removes the owned Firestore state document", async () => {
+  let method;
+  const result = await deleteUserState("user-1", "token", {
+    environment,
+    fetchImpl: async (_url, init) => {
+      method = init.method;
+      return new Response(null, { status: 200 });
+    },
+  });
+  assert.equal(method, "DELETE");
+  assert.deepEqual(result, { deleted: true });
+});
