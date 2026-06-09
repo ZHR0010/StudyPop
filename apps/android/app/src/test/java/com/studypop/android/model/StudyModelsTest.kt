@@ -1,7 +1,6 @@
 package com.studypop.android.model
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class StudyModelsTest {
@@ -31,8 +30,8 @@ class StudyModelsTest {
         assertEquals(StudyCompanion.PROFESSOR, restored.selectedCompanion)
         assertEquals("x = 3", restored.messages(StudySection.MATH)[1].text)
         assertEquals(7, restored.streak)
-        assertNotNull(restored.studyKit)
-        assertEquals("What is photosynthesis?", restored.studyKit.cards.first().front)
+        val restoredKit = requireNotNull(restored.studyKit)
+        assertEquals("What is photosynthesis?", restoredKit.cards.first().front)
     }
 
     @Test
