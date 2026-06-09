@@ -1,4 +1,9 @@
+import { createApiClient } from "./api-client.js";
+import { createFirebaseClient } from "./firebase-client.js";
+
 const STORAGE_KEY = "study-pop-state-v1";
+const firebaseClient = createFirebaseClient();
+const apiClient = createApiClient(firebaseClient);
 
 const sections = [
   { id: "study", name: "Study", icon: "sparkles", blurb: "Notes into superpowers", emoji: "✦" },
@@ -59,7 +64,9 @@ const fallbackKit = {
 };
 
 const root = document.querySelector("#root");
-const isLocalDesktop = ["127.0.0.1", "localhost"].includes(location.hostname);
+const isElectronDesktop = Boolean(window.studyPopDesktop?.isDesktop);
+const isLocalDesktop =
+  !isElectronDesktop && ["127.0.0.1", "localhost"].includes(location.hostname);
 let auth = {
   ready: false,
   user: null,
@@ -85,6 +92,7 @@ let ui = {
   voiceCaptured: false,
   showVoiceFallback: false,
   isCameraOpening: false,
+  cameraPreviewOpen: false,
   studyMode: "make",
   flashIndex: 0,
   flashFlipped: false,
@@ -106,6 +114,7 @@ let recordingTimer = null;
 let nativeRecordingId = null;
 let pendingVoiceBlob = null;
 let cameraPollTimer = null;
+let cameraPreviewStream = null;
 let flashlightStream = null;
 let toastTimer = null;
 let cloudSaveTimer = null;
@@ -138,25 +147,42 @@ function loadState() {
   }
 }
 
+function stateForCloudSync() {
+  return {
+    ...state,
+    chats: Object.fromEntries(
+      Object.entries(state.chats ?? {}).map(([sectionId, messages]) => [
+        sectionId,
+        (Array.isArray(messages) ? messages : []).map(({ images: _images, ...message }) => ({
+          ...message,
+          hadImages: Boolean(_images?.length),
+        })),
+      ]),
+    ),
+  };
+}
+
 function saveState() {
-  if (!auth.user) {
+  try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    showToast("Your latest chat is too large for this device. Clear an older image chat.");
+  }
+  if (!auth.user) {
     return;
   }
 
   window.clearTimeout(cloudSaveTimer);
   cloudSaveTimer = window.setTimeout(async () => {
     try {
-      const response = await fetch("/api/state", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ state }),
-      });
-      if (response.status === 401) {
+      await apiClient.saveState(stateForCloudSync());
+    } catch (error) {
+      if (error.status === 401 || error.code === "AUTH_REQUIRED") {
+        firebaseClient.signOut();
         auth.user = null;
         showToast("Your session ended. Log in again to keep syncing.");
+        return;
       }
-    } catch {
       showToast("Your changes are on this screen, but cloud sync is temporarily offline.");
     }
   }, 450);
@@ -368,11 +394,17 @@ function render() {
     </main>
     <video class="flashlight-video" data-flashlight-video muted playsinline></video>
     ${ui.toast ? `<div class="toast">${escapeHtml(ui.toast)}</div>` : ""}
+    ${ui.cameraPreviewOpen ? renderCameraCapture() : ""}
     ${auth.open ? renderAuthPage() : ""}
     ${auth.openAISetup ? renderOpenAISetup() : ""}
   `;
 
   paintIcons();
+  const cameraVideo = document.querySelector("[data-camera-preview]");
+  if (cameraVideo && cameraPreviewStream) {
+    cameraVideo.srcObject = cameraPreviewStream;
+    void cameraVideo.play().catch(() => {});
+  }
   const scroll = document.querySelector(".content-scroll");
   if (ui.isSending && scroll) scroll.scrollTop = scroll.scrollHeight;
 }
@@ -436,6 +468,11 @@ function renderAuthPage() {
               Password
               <span>${renderIcon("lock-keyhole")}<input name="password" type="password" autocomplete="${isSignup ? "new-password" : "current-password"}" required minlength="8" maxlength="72" placeholder="${isSignup ? "At least 8 characters" : "Your password"}" /></span>
             </label>
+            ${!isSignup ? `
+              <button class="forgot-password" type="button" data-action="forgot-password">
+                Forgot your password?
+              </button>
+            ` : ""}
             ${auth.error ? `<p class="auth-error">${renderIcon("circle-alert")} ${escapeHtml(auth.error)}</p>` : ""}
             <button class="auth-submit" type="submit" ${auth.busy ? "disabled" : ""}>
               ${renderIcon(isSignup ? "user-round-plus" : "log-in")}
@@ -544,6 +581,33 @@ function renderCompanionPicker() {
         `).join("")}
       </div>
     </div>
+  `;
+}
+
+function renderCameraCapture() {
+  return `
+    <section class="camera-capture-page" aria-label="Take a picture">
+      <button class="auth-backdrop" type="button" data-action="close-browser-camera" aria-label="Close camera"></button>
+      <div class="camera-capture-card">
+        <div class="camera-capture-heading">
+          <div>
+            <span class="speech-label">Question camera</span>
+            <h2>Line up the question</h2>
+            <p>Keep the page bright and steady so StudyPop can read it clearly.</p>
+          </div>
+          <button type="button" data-action="close-browser-camera" aria-label="Close camera">
+            ${renderIcon("x")}
+          </button>
+        </div>
+        <div class="camera-preview-wrap">
+          <video data-camera-preview muted playsinline></video>
+          <span></span>
+        </div>
+        <button class="camera-shutter" type="button" data-action="capture-browser-photo">
+          ${renderIcon("camera")} Take picture
+        </button>
+      </div>
+    </section>
   `;
 }
 
@@ -864,6 +928,17 @@ function renderComposer(section) {
                 ${renderIcon("camera")}
                 <span>${ui.isCameraOpening ? "Opening..." : "Snap"}</span>
               </button>
+            ` : isElectronDesktop ? `
+              <button
+                class="tool-button"
+                type="button"
+                data-action="open-browser-camera"
+                title="Snap a picture"
+                ${ui.isCameraOpening ? "disabled" : ""}
+              >
+                ${renderIcon("camera")}
+                <span>${ui.isCameraOpening ? "Opening..." : "Snap"}</span>
+              </button>
             ` : `
               <label class="tool-button" title="Snap a picture">
                 ${renderIcon("camera")}
@@ -973,6 +1048,7 @@ function resetTransientUi() {
   ui.voiceCaptured = false;
   ui.showVoiceFallback = false;
   ui.isCameraOpening = false;
+  closeBrowserCamera(false);
   window.clearInterval(cameraPollTimer);
   cameraPollTimer = null;
   ui.studyMode = "make";
@@ -994,24 +1070,30 @@ async function submitAuthForm(form) {
   render();
 
   try {
-    const response = await fetch(`/api/${formType}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        name: data.get("name")?.toString().trim(),
-        email: data.get("email")?.toString().trim(),
-        password: data.get("password")?.toString(),
-        state: formType === "signup" ? state : undefined,
-      }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Account request failed.");
+    const credentials = {
+      name: data.get("name")?.toString().trim(),
+      email: data.get("email")?.toString().trim(),
+      password: data.get("password")?.toString(),
+    };
+    const user = formType === "signup"
+      ? await firebaseClient.signUp(credentials)
+      : await firebaseClient.signIn(credentials);
 
-    auth.user = payload.user;
-    auth.openai = payload.openai ?? auth.openai;
+    auth.user = user;
+    apiClient.resetStateVersion();
+    if (formType === "signup") {
+      await apiClient.saveState(stateForCloudSync());
+    } else {
+      const synced = await apiClient.loadState();
+      if (synced.state) {
+        state = normalizeState(synced.state);
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } else {
+        await apiClient.saveState(stateForCloudSync());
+      }
+    }
     auth.open = false;
     auth.error = "";
-    state = normalizeState(payload.state);
     resetTransientUi();
     render();
     showToast(formType === "signup"
@@ -1058,16 +1140,37 @@ async function submitOpenAISetup(form) {
 
 async function logout() {
   window.clearTimeout(cloudSaveTimer);
-  try {
-    await fetch("/api/logout", { method: "POST" });
-  } finally {
-    auth.user = null;
-    auth.open = false;
-    auth.error = "";
-    state = loadState();
-    resetTransientUi();
+  firebaseClient.signOut();
+  apiClient.resetStateVersion();
+  auth.user = null;
+  auth.open = false;
+  auth.error = "";
+  state = loadState();
+  resetTransientUi();
+  render();
+  showToast("Logged out. Your account data is still safe.");
+}
+
+async function requestPasswordReset() {
+  const email = document.querySelector('.auth-form input[name="email"]')?.value.trim();
+  if (!email) {
+    auth.error = "Enter your email address first.";
     render();
-    showToast("Logged out. Your account data is still safe.");
+    return;
+  }
+
+  auth.busy = true;
+  auth.error = "";
+  render();
+  try {
+    await firebaseClient.sendPasswordReset(email);
+    auth.open = false;
+    showToast("Password reset email sent. Check your inbox.");
+  } catch (error) {
+    auth.error = error.message || "Could not send the password reset email.";
+  } finally {
+    auth.busy = false;
+    render();
   }
 }
 
@@ -1094,13 +1197,7 @@ async function submitQuestion() {
 
   try {
     if (section.id === "study" && ui.studyMode === "make") {
-      const response = await fetch("/api/study", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ note: question, images }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "I couldn’t make that study kit.");
+      const payload = await apiClient.createStudyKit({ note: question, images });
 
       state.studyKit = payload.kit;
       ui.flashIndex = 0;
@@ -1115,20 +1212,14 @@ async function submitQuestion() {
       });
     } else {
       const history = chatsFor(section.id).slice(-8).map(({ role, text }) => ({ role, text }));
-      const response = await fetch("/api/answer", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          section: section.id,
-          question,
-          images,
-          history,
-          companion: activeCompanion().name,
-          studyContext: section.id === "study" ? state.studyKit : null,
-        }),
+      const payload = await apiClient.answer({
+        section: section.id,
+        question,
+        images,
+        history,
+        companion: activeCompanion().name,
+        studyContext: section.id === "study" ? state.studyKit : null,
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "I got a little stuck.");
       pushChat(section.id, { role: "assistant", text: payload.answer });
     }
   } catch (error) {
@@ -1155,6 +1246,64 @@ async function imageToData(file) {
   canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
   source.close();
   return canvas.toDataURL("image/jpeg", 0.78);
+}
+
+async function openBrowserCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    showToast("This device does not provide camera access here.");
+    return;
+  }
+
+  ui.isCameraOpening = true;
+  render();
+  try {
+    cameraPreviewStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+      },
+      audio: false,
+    });
+    ui.cameraPreviewOpen = true;
+  } catch (error) {
+    const denied = ["NotAllowedError", "SecurityError"].includes(error.name);
+    showToast(denied
+      ? "Camera access is blocked. Allow it in your device settings, then try again."
+      : "StudyPop could not open that camera.");
+  } finally {
+    ui.isCameraOpening = false;
+    render();
+  }
+}
+
+function closeBrowserCamera(shouldRender = true) {
+  cameraPreviewStream?.getTracks().forEach((track) => track.stop());
+  cameraPreviewStream = null;
+  ui.cameraPreviewOpen = false;
+  if (shouldRender) render();
+}
+
+function captureBrowserPhoto() {
+  const video = document.querySelector("[data-camera-preview]");
+  if (!video?.videoWidth || !video?.videoHeight) {
+    showToast("The camera is still warming up. Try again in a moment.");
+    return;
+  }
+
+  const canvas = document.createElement("canvas");
+  const maximumWidth = 1600;
+  const scale = Math.min(1, maximumWidth / video.videoWidth);
+  canvas.width = Math.round(video.videoWidth * scale);
+  canvas.height = Math.round(video.videoHeight * scale);
+  canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+  ui.attachments.push({
+    name: `camera-${Date.now()}.jpg`,
+    data: canvas.toDataURL("image/jpeg", 0.88),
+  });
+  closeBrowserCamera(false);
+  render();
+  showToast("Picture added to your question.");
 }
 
 async function addImages(files) {
@@ -1442,22 +1591,10 @@ async function transcribePendingVoice() {
   render();
   try {
     const audio = await blobToDataUrl(pendingVoiceBlob);
-    const response = await fetch("/api/transcribe", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        audio,
-        mimeType: pendingVoiceBlob.type,
-      }),
+    const payload = await apiClient.transcribe({
+      audio,
+      mimeType: pendingVoiceBlob.type,
     });
-    const payload = await response.json();
-    if (!response.ok) {
-      if (payload.needsSetup) {
-        auth.openai.connected = false;
-        auth.openAISetup = true;
-      }
-      throw new Error(payload.error);
-    }
     ui.draft = `${ui.draft}${ui.draft ? " " : ""}${payload.text}`.trim();
     pendingVoiceBlob = null;
     ui.voiceCaptured = false;
@@ -1555,6 +1692,18 @@ root.addEventListener("click", (event) => {
     render();
   }
 
+  if (action === "open-browser-camera") {
+    openBrowserCamera();
+  }
+
+  if (action === "close-browser-camera") {
+    closeBrowserCamera();
+  }
+
+  if (action === "capture-browser-photo") {
+    captureBrowserPhoto();
+  }
+
   if (action === "open-auth") {
     auth.mode = button.dataset.mode || "signup";
     auth.error = "";
@@ -1576,6 +1725,10 @@ root.addEventListener("click", (event) => {
 
   if (action === "logout") {
     logout();
+  }
+
+  if (action === "forgot-password") {
+    requestPasswordReset();
   }
 
   if (action === "select-section") {
@@ -1717,13 +1870,23 @@ async function bootstrap() {
   `;
 
   try {
-    const response = await fetch("/api/session");
-    const payload = await response.json();
-    auth.user = payload.user ?? null;
-    auth.openai = payload.openai ?? auth.openai;
-    if (auth.user) state = normalizeState(payload.state);
+    const [firebaseStatus, config] = await Promise.all([
+      firebaseClient.initialize(),
+      apiClient.config(),
+    ]);
+    auth.user = firebaseStatus.user ?? null;
+    auth.openai = config.openai ?? auth.openai;
+    if (auth.user) {
+      const synced = await apiClient.loadState();
+      if (synced.state) {
+        state = normalizeState(synced.state);
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } else {
+        await apiClient.saveState(stateForCloudSync());
+      }
+    }
   } catch {
-    auth.user = null;
+    auth.user = firebaseClient.user;
   } finally {
     auth.ready = true;
     render();

@@ -1,0 +1,404 @@
+openapi: 3.1.0
+info:
+  title: StudyPop API
+  version: 1.0.0
+  description: Shared API used by StudyPop Web, Electron, and iOS.
+servers:
+  - url: https://studypop-flame.vercel.app
+    description: Production
+  - url: http://127.0.0.1:5173
+    description: Local development
+tags:
+  - name: Configuration
+  - name: Account
+  - name: Synchronization
+  - name: AI
+paths:
+  /api/v1/config:
+    get:
+      tags: [Configuration]
+      summary: Get public client configuration and capabilities
+      operationId: getConfiguration
+      responses:
+        "200":
+          description: Public configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Configuration"
+  /api/v1/me:
+    get:
+      tags: [Account]
+      summary: Get the authenticated Firebase user
+      operationId: getCurrentUser
+      security:
+        - firebaseIdToken: []
+      responses:
+        "200":
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/state:
+    get:
+      tags: [Synchronization]
+      summary: Load the authenticated user's synchronized app state
+      operationId: getState
+      security:
+        - firebaseIdToken: []
+      responses:
+        "200":
+          description: Synchronized state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StateEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Synchronization]
+      summary: Save the authenticated user's synchronized app state
+      operationId: putState
+      security:
+        - firebaseIdToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state, version]
+              properties:
+                state:
+                  $ref: "#/components/schemas/AppState"
+                version:
+                  type: integer
+                  minimum: 0
+      responses:
+        "200":
+          description: Save result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [saved, version]
+                properties:
+                  saved:
+                    type: boolean
+                  version:
+                    type: integer
+                  updatedAt:
+                    type: [string, "null"]
+                    format: date-time
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/ai/answer:
+    post:
+      tags: [AI]
+      summary: Answer a question or follow-up
+      operationId: answerQuestion
+      security:
+        - {}
+        - firebaseIdToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerRequest"
+      responses:
+        "200":
+          description: AI answer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [answer]
+                properties:
+                  provider:
+                    type: string
+                  answer:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/ai/study-kit:
+    post:
+      tags: [AI]
+      summary: Generate a summary, flashcards, and quiz questions
+      operationId: createStudyKit
+      security:
+        - {}
+        - firebaseIdToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note, images]
+              properties:
+                note:
+                  type: string
+                  maxLength: 24000
+                images:
+                  $ref: "#/components/schemas/ImageDataURLs"
+      responses:
+        "200":
+          description: Generated study kit
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [kit]
+                properties:
+                  kit:
+                    $ref: "#/components/schemas/StudyKit"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/ai/transcribe:
+    post:
+      tags: [AI]
+      summary: Transcribe a recorded voice question
+      operationId: transcribeVoice
+      security:
+        - {}
+        - firebaseIdToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audio]
+              properties:
+                audio:
+                  type: string
+                  contentEncoding: base64
+                mimeType:
+                  type: string
+      responses:
+        "200":
+          description: Transcription
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [text]
+                properties:
+                  text:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+components:
+  securitySchemes:
+    firebaseIdToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase-ID-Token
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: Missing, expired, or invalid Firebase ID token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+  schemas:
+    Configuration:
+      type: object
+      required: [apiVersion, firebase, openai, capabilities]
+      properties:
+        apiVersion:
+          const: v1
+        firebase:
+          type: object
+          required: [configured, config]
+          properties:
+            configured:
+              type: boolean
+            config:
+              type: [object, "null"]
+              additionalProperties: true
+        openai:
+          type: object
+          required: [connected, model]
+          properties:
+            connected:
+              type: boolean
+            model:
+              type: string
+        capabilities:
+          type: object
+          additionalProperties:
+            type: boolean
+    User:
+      type: object
+      required: [uid, email, name, emailVerified]
+      properties:
+        uid:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        emailVerified:
+          type: boolean
+        photoURL:
+          type: string
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+    StateEnvelope:
+      type: object
+      required: [state, version, updatedAt]
+      properties:
+        state:
+          oneOf:
+            - $ref: "#/components/schemas/AppState"
+            - type: "null"
+        version:
+          type: integer
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+    AppState:
+      type: object
+      required: [theme, companion, chats, streak]
+      properties:
+        theme:
+          type: string
+          enum: [light, pink, purple, blue, red, dark]
+        companion:
+          type: string
+        chats:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/Message"
+        studyKit:
+          oneOf:
+            - $ref: "#/components/schemas/StudyKit"
+            - type: "null"
+        streak:
+          type: integer
+          minimum: 0
+    Message:
+      type: object
+      required: [role, text]
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant]
+        text:
+          type: string
+        hadImages:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    AnswerRequest:
+      type: object
+      required: [section, question, images, history]
+      properties:
+        section:
+          type: string
+          enum:
+            - study
+            - general
+            - math
+            - history
+            - biology
+            - physics
+            - economics
+            - chemistry
+            - literature
+            - government
+        question:
+          type: string
+          maxLength: 6000
+        images:
+          $ref: "#/components/schemas/ImageDataURLs"
+        history:
+          type: array
+          maxItems: 8
+          items:
+            $ref: "#/components/schemas/Message"
+        companion:
+          type: string
+        studyContext:
+          oneOf:
+            - $ref: "#/components/schemas/StudyKit"
+            - type: "null"
+    ImageDataURLs:
+      type: array
+      maxItems: 4
+      items:
+        type: string
+        pattern: "^data:image/(png|jpeg|webp);base64,"
+    StudyKit:
+      type: object
+      required: [summary, keyPoints, cards, questions]
+      properties:
+        summary:
+          type: string
+        keyPoints:
+          type: array
+          items:
+            type: string
+        cards:
+          type: array
+          items:
+            type: object
+            required: [front, back]
+            properties:
+              front:
+                type: string
+              back:
+                type: string
+        questions:
+          type: array
+          items:
+            type: string
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+

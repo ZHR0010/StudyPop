@@ -4,3 +4,7 @@ data/
 .server-port
 server.log
 server.err.log
+server-*.log
+server-*.err.log
+apps/desktop/release/
+.codex-bin/

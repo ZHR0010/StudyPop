@@ -3,7 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/desktop"
+  ],
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node --test",
+    "check": "node --check server.mjs && node --check src/app.js",
+    "desktop:dev": "npm --workspace @studypop/desktop run dev",
+    "desktop:pack": "npm --workspace @studypop/desktop run pack",
+    "desktop:dist": "npm --workspace @studypop/desktop run dist"
   }
 }

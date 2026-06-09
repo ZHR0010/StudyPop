@@ -18,6 +18,15 @@ import {
   scryptSync,
   timingSafeEqual,
 } from "node:crypto";
+import {
+  FirebaseRequestError,
+  bearerToken,
+  firebaseConfigured,
+  firebasePublicConfig,
+  readUserState,
+  verifyFirebaseIdToken,
+  writeUserState,
+} from "./lib/firebase-rest.mjs";
 
 const root = resolve(".");
 loadEnvFile(join(root, ".env"));
@@ -31,6 +40,7 @@ const dataDirectory = process.env.VERCEL
 const usersFile = join(dataDirectory, "users.json");
 const sessions = new Map();
 const loginAttempts = new Map();
+const apiAttempts = new Map();
 const nativeSpeechSessions = new Map();
 const cameraSessions = new Map();
 const nativeSpeechDirectory = join(dataDirectory, "native-speech");
@@ -177,8 +187,15 @@ function clearSession(response, request) {
 function requestIsSameOrigin(request) {
   const origin = request.headers.origin;
   if (!origin) return true;
+  if (origin === "null" && bearerToken(request)) return true;
   try {
-    return new URL(origin).host === request.headers.host;
+    const parsed = new URL(origin);
+    if (parsed.host === request.headers.host) return true;
+    const allowedOrigins = String(process.env.ALLOWED_ORIGINS ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return allowedOrigins.includes(parsed.origin);
   } catch {
     return false;
   }
@@ -206,6 +223,18 @@ function clearLoginAttempts(request) {
   loginAttempts.delete(clientKey(request));
 }
 
+function apiIsLimited(request, bucket, limit, windowMilliseconds = 60_000) {
+  const key = `${bucket}:${clientKey(request)}`;
+  const now = Date.now();
+  const record = apiAttempts.get(key);
+  if (!record || record.resetAt <= now) {
+    apiAttempts.set(key, { count: 1, resetAt: now + windowMilliseconds });
+    return false;
+  }
+  record.count += 1;
+  return record.count > limit;
+}
+
 function cleanSavedState(value) {
   const state = value && typeof value === "object" ? value : {};
   const cleaned = {
@@ -220,8 +249,8 @@ function cleanSavedState(value) {
       : 3,
   };
 
-  if (Buffer.byteLength(JSON.stringify(cleaned), "utf8") > 8_000_000) {
-    throw new Error("Your saved study data is too large. Clear a few image chats first.");
+  if (Buffer.byteLength(JSON.stringify(cleaned), "utf8") > 800_000) {
+    throw new Error("Your synced study data is too large. Clear a few older chats first.");
   }
   return cleaned;
 }
@@ -388,6 +417,28 @@ function sendJson(response, status, body) {
     "cache-control": "no-store",
   });
   response.end(JSON.stringify(body));
+}
+
+function sendApiError(response, error, fallbackStatus = 500) {
+  const status = Number(error?.status) || fallbackStatus;
+  const code = error?.code || (status === 401 ? "AUTH_REQUIRED" : "REQUEST_FAILED");
+  sendJson(response, status, {
+    error: {
+      code,
+      message: normalizeText(error?.message) || "StudyPop could not complete that request.",
+    },
+  });
+}
+
+function sendRequestError(response, apiV1, status, message, code = "INVALID_REQUEST") {
+  if (apiV1) {
+    const error = new Error(message);
+    error.status = status;
+    error.code = code;
+    sendApiError(response, error, status);
+    return;
+  }
+  sendJson(response, status, { error: message });
 }
 
 function readJsonBody(request) {
@@ -888,6 +939,135 @@ async function handleSaveState(request, response) {
   }
 }
 
+async function authenticatedFirebaseRequest(request) {
+  const token = bearerToken(request);
+  const user = await verifyFirebaseIdToken(token);
+  return { token, user };
+}
+
+async function verifyOptionalFirebaseRequest(request) {
+  const token = bearerToken(request);
+  if (!token) return null;
+  return {
+    token,
+    user: await verifyFirebaseIdToken(token),
+  };
+}
+
+function handleV1Config(_request, response) {
+  const configured = firebaseConfigured();
+  sendJson(response, 200, {
+    apiVersion: "v1",
+    firebase: {
+      configured,
+      config: configured ? firebasePublicConfig() : null,
+    },
+    openai: openAIStatus(),
+    capabilities: {
+      authentication: configured,
+      cloudSync: configured,
+      imageQuestions: true,
+      voiceTranscription: true,
+      studyKits: true,
+    },
+  });
+}
+
+async function handleV1Me(request, response) {
+  try {
+    const { user } = await authenticatedFirebaseRequest(request);
+    sendJson(response, 200, { user });
+  } catch (error) {
+    sendApiError(response, error, 401);
+  }
+}
+
+async function handleV1GetState(request, response) {
+  try {
+    const { token, user } = await authenticatedFirebaseRequest(request);
+    const record = await readUserState(user.uid, token);
+    sendJson(response, 200, {
+      state: record?.state ?? null,
+      version: record?.version ?? 0,
+      updatedAt: record?.updatedAt ?? null,
+    });
+  } catch (error) {
+    sendApiError(response, error);
+  }
+}
+
+async function handleV1SaveState(request, response) {
+  try {
+    const { token, user } = await authenticatedFirebaseRequest(request);
+    const body = await readJsonBody(request);
+    const state = cleanSavedState(body.state);
+    const expectedVersion = Number(body.version ?? 0);
+    const result = await writeUserState(user.uid, token, state, {
+      expectedVersion,
+    });
+    sendJson(response, 200, result);
+  } catch (error) {
+    sendApiError(response, error, error instanceof FirebaseRequestError ? 500 : 400);
+  }
+}
+
+async function handleV1Answer(request, response) {
+  try {
+    if (apiIsLimited(request, "answer", 30)) {
+      sendApiError(
+        response,
+        new FirebaseRequestError("You are asking very quickly. Pause for a moment and try again.", {
+          status: 429,
+          code: "RATE_LIMITED",
+        }),
+      );
+      return;
+    }
+    await verifyOptionalFirebaseRequest(request);
+    await handleAnswer(request, response, true);
+  } catch (error) {
+    sendApiError(response, error);
+  }
+}
+
+async function handleV1Study(request, response) {
+  try {
+    if (apiIsLimited(request, "study", 12)) {
+      sendApiError(
+        response,
+        new FirebaseRequestError("Please wait a moment before making another study kit.", {
+          status: 429,
+          code: "RATE_LIMITED",
+        }),
+      );
+      return;
+    }
+    await verifyOptionalFirebaseRequest(request);
+    await handleStudy(request, response, true);
+  } catch (error) {
+    sendApiError(response, error);
+  }
+}
+
+async function handleV1Transcribe(request, response) {
+  try {
+    if (apiIsLimited(request, "transcribe", 10)) {
+      sendApiError(
+        response,
+        new FirebaseRequestError("Please wait a moment before transcribing another recording.", {
+          status: 429,
+          code: "RATE_LIMITED",
+        }),
+      );
+      return;
+    }
+    await verifyOptionalFirebaseRequest(request);
+    await handleTranscribe(request, response, true);
+  } catch (error) {
+    sendApiError(response, error);
+  }
+}
+
 async function handleOpenAIConnect(request, response) {
   try {
     if (!requestIsLoopback(request)) {
@@ -1265,14 +1445,20 @@ function handleWindowsDictationToggle(request, response) {
   });
 }
 
-async function handleAnswer(request, response) {
+async function handleAnswer(request, response, apiV1 = false) {
   try {
     const body = await readJsonBody(request);
     const section = subjectLabels[body.section] ? body.section : "general";
     const question = normalizeText(body.question).slice(0, 6000);
     const images = cleanImages(body.images);
     if (!question && !images.length) {
-      sendJson(response, 400, { error: "Add a question, image, or voice note first." });
+      sendRequestError(
+        response,
+        apiV1,
+        400,
+        "Add a question, image, or voice note first.",
+        "QUESTION_REQUIRED",
+      );
       return;
     }
 
@@ -1300,17 +1486,23 @@ async function handleAnswer(request, response) {
       answer,
     });
   } catch (error) {
-    sendJson(response, 400, { error: error.message });
+    sendRequestError(response, apiV1, 400, error.message);
   }
 }
 
-async function handleStudy(request, response) {
+async function handleStudy(request, response, apiV1 = false) {
   try {
     const body = await readJsonBody(request);
     const note = normalizeText(body.note).slice(0, 24_000);
     const images = cleanImages(body.images);
     if (note.length < 12 && !images.length) {
-      sendJson(response, 400, { error: "Add a few lines of notes or a clear note photo first." });
+      sendRequestError(
+        response,
+        apiV1,
+        400,
+        "Add a few lines of notes or a clear note photo first.",
+        "STUDY_NOTE_REQUIRED",
+      );
       return;
     }
 
@@ -1328,16 +1520,22 @@ async function handleStudy(request, response) {
 
     sendJson(response, 200, { kit });
   } catch (error) {
-    sendJson(response, 400, { error: error.message });
+    sendRequestError(response, apiV1, 400, error.message);
   }
 }
 
-async function handleTranscribe(request, response) {
+async function handleTranscribe(request, response, apiV1 = false) {
   try {
     const body = await readJsonBody(request);
     const match = String(body.audio ?? "").match(/^data:([^;]+);base64,(.+)$/);
     if (!match) {
-      sendJson(response, 400, { error: "That voice note could not be read." });
+      sendRequestError(
+        response,
+        apiV1,
+        400,
+        "That voice note could not be read.",
+        "AUDIO_INVALID",
+      );
       return;
     }
 
@@ -1354,19 +1552,97 @@ async function handleTranscribe(request, response) {
     );
     sendJson(response, 200, { text });
   } catch (error) {
-    sendJson(response, error.needsSetup ? 503 : 400, {
-      error: error.message,
-      needsSetup: Boolean(error.needsSetup),
-    });
+    if (apiV1) {
+      sendRequestError(
+        response,
+        true,
+        error.needsSetup ? 503 : 400,
+        error.message,
+        error.needsSetup ? "OPENAI_NOT_CONFIGURED" : "TRANSCRIPTION_FAILED",
+      );
+    } else {
+      sendJson(response, error.needsSetup ? 503 : 400, {
+        error: error.message,
+        needsSetup: Boolean(error.needsSetup),
+      });
+    }
   }
 }
 
 export function handleRequest(request, response) {
+    const requestId = String(request.headers["x-request-id"] ?? randomUUID()).slice(0, 100);
+    response.setHeader("x-request-id", requestId);
+    response.setHeader("x-content-type-options", "nosniff");
+    response.setHeader("referrer-policy", "strict-origin-when-cross-origin");
+    response.setHeader("permissions-policy", "camera=(self), microphone=(self)");
+    response.setHeader(
+      "content-security-policy",
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+    );
+
+    if (request.method === "OPTIONS") {
+      if (!requestIsSameOrigin(request)) {
+        sendJson(response, 403, { error: "That request was blocked." });
+        return;
+      }
+      response.writeHead(204, {
+        "access-control-allow-headers": "authorization, content-type, idempotency-key",
+        "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+        "access-control-max-age": "86400",
+      });
+      response.end();
+      return;
+    }
+
     if (
       ["POST", "PUT", "PATCH", "DELETE"].includes(request.method ?? "") &&
       !requestIsSameOrigin(request)
     ) {
       sendJson(response, 403, { error: "That request was blocked." });
+      return;
+    }
+
+    if (request.method === "GET" && request.url?.startsWith("/api/v1/config")) {
+      handleV1Config(request, response);
+      return;
+    }
+
+    if (request.method === "GET" && request.url?.startsWith("/api/v1/me")) {
+      handleV1Me(request, response);
+      return;
+    }
+
+    if (request.method === "GET" && request.url?.startsWith("/api/v1/state")) {
+      handleV1GetState(request, response);
+      return;
+    }
+
+    if (request.method === "PUT" && request.url?.startsWith("/api/v1/state")) {
+      handleV1SaveState(request, response);
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      request.url?.startsWith("/api/v1/ai/answer")
+    ) {
+      handleV1Answer(request, response);
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      request.url?.startsWith("/api/v1/ai/study-kit")
+    ) {
+      handleV1Study(request, response);
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      request.url?.startsWith("/api/v1/ai/transcribe")
+    ) {
+      handleV1Transcribe(request, response);
       return;
     }
 

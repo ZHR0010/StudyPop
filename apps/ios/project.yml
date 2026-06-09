@@ -1,0 +1,44 @@
+name: StudyPop
+
+options:
+  bundleIdPrefix: com.studypop
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  StudyPop:
+    type: application
+    platform: iOS
+    sources:
+      - path: StudyPop
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.studypop.ios
+        PRODUCT_NAME: StudyPop
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: StudyPop/Info.plist
+    scheme:
+      testTargets:
+        - StudyPopTests
+
+  StudyPopTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: StudyPopTests
+    dependencies:
+      - target: StudyPop
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.studypop.ios.tests
+
