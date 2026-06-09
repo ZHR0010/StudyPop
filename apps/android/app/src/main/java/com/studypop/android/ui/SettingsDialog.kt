@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -38,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.studypop.android.AppViewModel
 import com.studypop.android.R
-import com.studypop.android.model.Companion
+import com.studypop.android.model.StudyCompanion
 import com.studypop.android.model.StudyTheme
 import kotlinx.coroutines.launch
 
@@ -91,7 +90,7 @@ fun SettingsDialog(viewModel: AppViewModel, onDismiss: () -> Unit) {
                 }
 
                 Text("Companion", style = MaterialTheme.typography.titleMedium)
-                Companion.entries.forEach { companion ->
+                StudyCompanion.entries.forEach { companion ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -163,13 +162,13 @@ fun SettingsDialog(viewModel: AppViewModel, onDismiss: () -> Unit) {
 }
 
 @Composable
-fun CompanionImage(companion: Companion, size: Int) {
+fun CompanionImage(companion: StudyCompanion, size: Int) {
     val drawable = when (companion) {
-        Companion.GOJO -> R.drawable.companion_gojo
-        Companion.TANJIRO -> R.drawable.companion_tanjiro
-        Companion.PROFESSOR -> R.drawable.companion_professor
-        Companion.ELEVEN -> R.drawable.companion_eleven
-        Companion.HARRY -> R.drawable.companion_harry
+        StudyCompanion.GOJO -> R.drawable.companion_gojo
+        StudyCompanion.TANJIRO -> R.drawable.companion_tanjiro
+        StudyCompanion.PROFESSOR -> R.drawable.companion_professor
+        StudyCompanion.ELEVEN -> R.drawable.companion_eleven
+        StudyCompanion.HARRY -> R.drawable.companion_harry
     }
     Image(
         painter = painterResource(drawable),

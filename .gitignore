@@ -1,6 +1,6 @@
 node_modules/
 .env
-data/
+/data/
 .server-port
 server.log
 server.err.log

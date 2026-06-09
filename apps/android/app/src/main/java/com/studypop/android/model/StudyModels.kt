@@ -58,7 +58,7 @@ enum class StudyTheme(val id: String, val label: String) {
     }
 }
 
-enum class Companion(
+enum class StudyCompanion(
     val id: String,
     val displayName: String,
     val assetName: String,
@@ -71,7 +71,7 @@ enum class Companion(
     HARRY("harry", "Harry Potter", "companion_harry", "Let's work a little study magic.");
 
     companion object {
-        fun fromId(id: String): Companion = entries.firstOrNull { it.id == id } ?: GOJO
+        fun fromId(id: String): StudyCompanion = entries.firstOrNull { it.id == id } ?: GOJO
     }
 }
 
@@ -135,13 +135,13 @@ data class StudyKit(
 
 data class StudyPopState(
     val theme: String = StudyTheme.PINK.id,
-    val companion: String = Companion.GOJO.id,
+    val companion: String = StudyCompanion.GOJO.id,
     val chats: Map<String, List<ChatMessage>> = emptyMap(),
     val studyKit: StudyKit? = null,
     val streak: Int = 3,
 ) {
     val selectedTheme: StudyTheme get() = StudyTheme.fromId(theme)
-    val selectedCompanion: Companion get() = Companion.fromId(companion)
+    val selectedCompanion: StudyCompanion get() = StudyCompanion.fromId(companion)
 
     fun messages(section: StudySection): List<ChatMessage> = chats[section.id].orEmpty()
 
@@ -170,7 +170,7 @@ data class StudyPopState(
             val rawKit = json.opt("studyKit")
             return StudyPopState(
                 theme = json.optString("theme", StudyTheme.PINK.id),
-                companion = json.optString("companion", Companion.GOJO.id),
+                companion = json.optString("companion", StudyCompanion.GOJO.id),
                 chats = chats,
                 studyKit = if (rawKit is JSONObject) StudyKit.fromJson(rawKit) else null,
                 streak = json.optInt("streak", 3),

@@ -9,7 +9,7 @@ class StudyModelsTest {
     fun stateRoundTripPreservesConversationAndStudyKit() {
         val original = StudyPopState(
             theme = StudyTheme.PURPLE.id,
-            companion = Companion.PROFESSOR.id,
+            companion = StudyCompanion.PROFESSOR.id,
             chats = mapOf(
                 StudySection.MATH.id to listOf(
                     ChatMessage(role = "user", text = "Solve x + 2 = 5"),
@@ -28,7 +28,7 @@ class StudyModelsTest {
         val restored = StudyPopState.fromJson(original.toJson())
 
         assertEquals(StudyTheme.PURPLE, restored.selectedTheme)
-        assertEquals(Companion.PROFESSOR, restored.selectedCompanion)
+        assertEquals(StudyCompanion.PROFESSOR, restored.selectedCompanion)
         assertEquals("x = 3", restored.messages(StudySection.MATH)[1].text)
         assertEquals(7, restored.streak)
         assertNotNull(restored.studyKit)
@@ -40,7 +40,7 @@ class StudyModelsTest {
         val state = StudyPopState(theme = "mystery", companion = "unknown")
 
         assertEquals(StudyTheme.PINK, state.selectedTheme)
-        assertEquals(Companion.GOJO, state.selectedCompanion)
+        assertEquals(StudyCompanion.GOJO, state.selectedCompanion)
         assertEquals(StudySection.STUDY, StudySection.fromId("not-a-room"))
     }
 }

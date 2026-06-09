@@ -13,7 +13,7 @@ import com.studypop.android.data.FirebaseAuthService
 import com.studypop.android.data.StudyPopApi
 import com.studypop.android.model.AuthUser
 import com.studypop.android.model.ChatMessage
-import com.studypop.android.model.Companion
+import com.studypop.android.model.StudyCompanion
 import com.studypop.android.model.StudyPopState
 import com.studypop.android.model.StudySection
 import com.studypop.android.model.StudyTheme
@@ -49,7 +49,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var companionActionIndex by mutableIntStateOf(0)
         private set
 
-    val companion: Companion get() = state.selectedCompanion
+    val companion: StudyCompanion get() = state.selectedCompanion
     val theme: StudyTheme get() = state.selectedTheme
     val messages: List<ChatMessage> get() = state.messages(selectedSection)
     val companionActions = listOf(
@@ -113,7 +113,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         setState(state.copy(theme = theme.id))
     }
 
-    fun selectCompanion(companion: Companion) {
+    fun selectCompanion(companion: StudyCompanion) {
         companionActionIndex = 0
         setState(state.copy(companion = companion.id))
     }
