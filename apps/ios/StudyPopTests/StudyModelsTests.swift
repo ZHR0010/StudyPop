@@ -4,11 +4,20 @@ import XCTest
 final class StudyModelsTests: XCTestCase {
     func testStateRoundTripPreservesConversationAndStudyKit() throws {
         var state = StudyPopState()
+        let timestamp = Date(timeIntervalSince1970: 1_780_000_000)
         state.selectedTheme = .purple
         state.selectedCompanion = .professor
         state.chats[StudySection.math.rawValue] = [
-            ChatMessage(role: .user, text: "What is the square root of 81?"),
-            ChatMessage(role: .assistant, text: "The answer is 9."),
+            ChatMessage(
+                role: .user,
+                text: "What is the square root of 81?",
+                createdAt: timestamp
+            ),
+            ChatMessage(
+                role: .assistant,
+                text: "The answer is 9.",
+                createdAt: timestamp
+            ),
         ]
         state.studyKit = StudyKit(
             summary: "A small summary",
@@ -33,4 +42,3 @@ final class StudyModelsTests: XCTestCase {
         XCTAssertTrue(StudySection.allCases.allSatisfy { !$0.symbol.isEmpty })
     }
 }
-
