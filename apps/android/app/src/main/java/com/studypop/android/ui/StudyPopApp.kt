@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
@@ -36,7 +37,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -643,7 +643,11 @@ private fun Composer(
                     onClick = onSend,
                     modifier = Modifier.background(MaterialTheme.colorScheme.primary, CircleShape),
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Send question", tint = Color.White)
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send question",
+                        tint = Color.White,
+                    )
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
